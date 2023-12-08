@@ -72,7 +72,7 @@ atlas_battery.battery = get_battery;
 atlas_battery.get_battery_diff = get_battery_diff
 export default atlas_battery;
 
-// globalThis.bat_start = get_battery()
+globalThis.bat_start = get_battery()
 
 export class BatteryWorkers extends WorkersManager {
     constructor(server_count,

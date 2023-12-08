@@ -55,7 +55,8 @@ function connect_to_server(node) {
     node['nonce'] = 0
 
     // console.log(`connect_t_server.js:57 reconnect_attempts=${reconnect_attempts} wait_sec=${wait_sec}`);
-    var c_idx = atlas.connect(
+    node.connected = false;
+    var result = atlas.connect(
         node.c_idx,
         node.ip,
         node.port,
@@ -65,34 +66,35 @@ function connect_to_server(node) {
         reconnect_attempts,
         wait_sec
     );
-    if (c_idx == -1) {
+    if (result == -1) {
         print(`Failed to connect to server: ${node.ip}:${node.port}`);
-        node.c_idx = -1;
-        return node;
+        return false;
     }
-    node.c_idx = c_idx;
+    node.connected = true
     
-    const r_send_pubkey = atlas.send_pubkey(c_idx)
+    const r_send_pubkey = atlas.send_pubkey(node.c_idx)
     if (r_send_pubkey === undefined) {
         print(`Failed send_pubkey (${r_send_pubkey}) to server: ${node.ip}:${node.port}`);
-        atlas.close(c_idx);
-        return node;
+        atlas.close(node.c_idx);
+        return false;
     }
 
-    const r_recv_pubkey = atlas.recv_pubkey(c_idx);
+    const r_recv_pubkey = atlas.recv_pubkey(node.c_idx);
     if (!r_send_pubkey) {
         print(`Failed recv_pubkey (${r_recv_pubkey}) from server: ${node.ip}:${node.port}`);
-        atlas.close(c_idx);
-        return node;
+        atlas.close(node.c_idx);
+        return flase;
     }
     
-    const r_recv_ekey = atlas.recv_encryption_key(c_idx);
+    const r_recv_ekey = atlas.recv_encryption_key(node.c_idx);
     if (r_recv_ekey === undefined) {
         print(`Failed recv_encryption_key(${r_recv_ekey}) from server: ${node.ip}:${node.port}`);
-        atlas.close(c_idx);
-        return node;
+        atlas.close(node.c_idx);
+        return false;
     }
-    return node;
+
+    node.connected = true;
+    return true;
 }
 
 const func_depends = new Map();
@@ -115,11 +117,9 @@ function send(node, msg, arguments_list) {
             // console.log(`atlas-worker.js:106 send write write_res=${write_res}`);
             if(write_res == undefined) {
                 // Need to reset the nonce and resend the depends
-                // TODO(epl): main thread only sends depends once
                 // console.log(`atlas-worker.js:115 write failed`);
-                connect_to_server(node);
-                if (node.c_idx == -1) {
-                    console.log(`atlas-worker.js:119 connection failed`);
+                if (!connect_to_server(node)) {
+                    // console.log(`atlas-worker.js:119 connection failed`);
                     break;
                 }
                 msg.nonce = node.nonce;
@@ -134,8 +134,7 @@ function send(node, msg, arguments_list) {
             // undefined mean communication failure, so reconnect
             if(data_both === undefined) {
                 // console.log(`atlas-worker.js:138 receive failed`);
-                connect_to_server(node);
-                if (node.c_idx == -1) {
+                if (!connect_to_server(node)) {
                     console.log(`connection failed`);
                     break;
                 }
@@ -155,8 +154,7 @@ function send(node, msg, arguments_list) {
             
             if(recv_res === undefined) {
                 // console.log(`atlas-worker.js:139 recv failed`);
-                connect_to_server(node);
-                if (node.c_idx == -1) {
+                if (connect_to_server(node)) {
                     console.log(`atlas-worker.js:142 connection failed`);
                     break;
                 }
@@ -184,7 +182,7 @@ function send(node, msg, arguments_list) {
             break;
         }
     }
-    console.log(`atlas-worker.js:178 failed`);
+    // console.log(`atlas-worker.js:178 failed`);
     var fail_response =  craft_response(send_start, 'LOCAL', undefined, msg, "remote");
     return fail_response;
 }
@@ -222,12 +220,11 @@ var parent = os.Worker.parent;
 
 function add_servers(server_nodes) {
     server_nodes.forEach((node) => {
-        var connected_node = connect_to_server(node);
-        if (connected_node === -1) {
+        node.c_idx = server_count;
+        if (!connect_to_server(node)) {
             std.exit(1);
         }
-        node.c_idx = connected_node;
-        server_list[server_count] = connected_node;
+        server_list[server_count] = node;
         server_count++;
     });
 }

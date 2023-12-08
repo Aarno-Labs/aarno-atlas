@@ -29,8 +29,8 @@ async function main() {
         let image_data = os.read(raw_data, abuf, 0, raw_stat[0].size);
         let buf = new Uint8Array(abuf);
 
-        let width = 704;
-        let height = 576;
+        let width = 439;
+        let height = 293;
         
         var rawImageData = {
             data: buf,

@@ -375,9 +375,9 @@ export class AtlasWrapper {
 
         return new Promise(async (resolve, reject) => {
             try {
-                console.log(`atlas-wrapper.js:375 about to await target`);
+                // console.log(`atlas-wrapper.js:375 about to await target`);
                 let res = await target.call(this, ...argumentsList);
-                console.log(`atlas-wrapper.js:377 awaited target`);
+                // console.log(`atlas-wrapper.js:377 awaited target`);
                 result.started;
                 result.data = res;
                 result.duration = atlas_tools.get_time_diff(atlas_tools.get_time(), issue_time);
@@ -389,9 +389,9 @@ export class AtlasWrapper {
                 result.tid = -1;
                 result.func = target_name;
                 result.buffer_size = JSON.stringify(argumentsList).length;
-                console.log(`atlas-wrapper.js:389 ${res}`);
+                // console.log(`atlas-wrapper.js:389 ${res}`);
                 globalThis.aWrapper.workerManager.atlas_increase_function_count(target_name);
-                console.log(`atlas-wrapper.js:389 ${resolve}`);
+                // console.log(`atlas-wrapper.js:389 ${resolve}`);
                 resolve(res);
             } catch(e) {
                 reject(e);

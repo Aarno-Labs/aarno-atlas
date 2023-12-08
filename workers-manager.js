@@ -72,9 +72,9 @@ export class WorkersManager {
                 try {
                     var local_exec = this.local_exec.get(e.data.values.req_id);
                     // console.log(`workers-manager.js:57`);
-                    for(const k in aWrapper) {
-                        console.log(`aWrapper[${k}]=${aWrapper[k]}`);
-                    }
+                    // for(const k in aWrapper) {
+                    //     console.log(`aWrapper[${k}]=${aWrapper[k]}`);
+                    // }
                     var local_promise = aWrapper.exec_local(
                         local_exec.target,
                         local_exec.target_name,
