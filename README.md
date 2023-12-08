@@ -47,37 +47,41 @@ pi@pi1:~/$ ATLAS_HOME=`pwd` . ./atlas.sh
 
 `Done Encode` indicates the new image  has been received by the client.
 
-If the connection to the server is lost, qjs will attempt to reconnect.
+If the connection to the server is lost, qjs run the computation locally.
 
-The following output shows a disconnect and reconnect:
+If connection to the server is established, it will offload computations again.
+
+The following output shows a disconnect, local execution and reconnect:
 ```
 pi@pi1:~/$ ATLAS_HOME=`pwd` . ./atlas.sh
-[2023/10/31-09:40:12.664] Call Encode
-[2023/10/31-09:40:14.002] Done Encode
-[2023/10/31-09:40:14.006] Call Encode
-[2023/10/31-09:40:15.236] Done Encode
-[2023/10/31-09:40:15.240] Call Encode
-[2023/10/31-09:40:16.474] Done Encode
-[2023/10/31-09:40:16.477] Call Encode
-[2023/10/31 09:40:16.928] Connect attempt(1)
+[2023/12/08-10:19:09.563] Call Encode
+[2023/12/08-10:19:10.548] Done Encode
+[2023/12/08-10:19:10.550] Call Encode
+[2023/12/08-10:19:11.541] Done Encode
+[2023/12/08-10:19:11.543] Call Encode
+[2023/12/8 10:19:12.510] Connect attempt(1) old_fd=7, new_fd=9
 r_connect[1] failed sock_fd=9 -1 Connection refused
-3057714240:error:1409E10F:SSL routines:ssl3_write_bytes:bad length:../ssl/record/rec_layer_s3.c:364:
-[2023/10/31 09:40:17.936] Connect attempt(2)
-r_connect[2] failed sock_fd=7 -1 Connection refused
-[2023/10/31 09:40:18.943] Connect attempt(3)
-r_connect[3] failed sock_fd=9 -1 Connection refused
-[2023/10/31 09:40:19.953] Connect attempt(4)
-r_connect[4] failed sock_fd=7 -1 Connection refused
-[2023/10/31 09:40:20.960] Connect attempt(5)
-r_connect[5] failed sock_fd=9 -1 Connection refused
-[2023/10/31 09:40:21.971] Connect success(6)
-[2023/10/31-09:40:23.380] Done Encode
-[2023/10/31-09:40:23.383] Call Encode
-[2023/10/31-09:40:24.621] Done Encode
+Failed to connect to server: 192.168.0.22:7000
+connection failed
+[2023/12/08-10:20:09.195] Done Encode
+[2023/12/08-10:20:09.206] Call Encode
+[2023/12/8 10:20:09.489] Connect attempt(1) old_fd=7, new_fd=9
+r_connect[1] failed sock_fd=9 -1 Connection refused
+Failed to connect to server: 192.168.0.22:7000
+[2023/12/08-10:21:04.796] Done Encode
+[2023/12/08-10:21:04.798] Call Encode
+[2023/12/8 10:21:04.978] Connect attempt(1) old_fd=7, new_fd=9
+r_connect[1] failed sock_fd=9 -1 Connection refused
+Failed to connect to server: 192.168.0.22:7000
+[2023/12/08-10:21:59.726] Done Encode
+[2023/12/08-10:21:59.729] Call Encode
+[2023/12/08-10:22:01.388] Done Encode
 ...
 ```
 
 The client attempts to reconnect for approximately 10 minutes.
+
+Passing `-r` to `atlas.sh` enables remote only execution, which will not run computations locally if the connection to the server is lost.
 
 Passing `-v` to `atlas.sh` provides verbose output.
 
@@ -130,9 +134,3 @@ Other benchmark client require in the installation of npm packages.
 The `qjs` uses the self-signed `cert.pem` certificate for SSL communication with the server.
 
 `qjs` directly loads the certificate, it doesn't need to be installed in the system.
-
-
-
-
-
-
