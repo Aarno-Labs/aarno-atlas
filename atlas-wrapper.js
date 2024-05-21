@@ -1,3 +1,4 @@
+import * as os from "os";
 /*
  * Variables used for scheduling 
  */
@@ -48,13 +49,18 @@ export class AtlasWrapper {
          * thus, they will NOT have to return a PROMISE, but the actual value back to A
          */
         this.atlas_nested_fcalls = 0;
-        
+
         this.handler =  {
             apply: (target, p1, ...arguments_list) => {
+                // console.log(`atlas-wrapper.js:54`);
                 // iterate all wrapped objects
                 var target_name = get_real_target_name(target);
                 if (local_execution == false) {
-                    var scaler =  this.atlas_scale(target, target_name, ...arguments_list);
+                    try {
+                        var scaler =  this.atlas_scale(target, target_name, ...arguments_list);
+                    } catch(e) {
+                        console.log(e);
+                    }
                     return scaler;
                 } else {
                     this.atlas_nested_fcalls++;
@@ -109,6 +115,24 @@ export class AtlasWrapper {
         
     }
 
+    handler_func(offload) {
+        return {
+            apply: (target, p1, ...arguments_list) => {
+                // iterate all wrapped objects
+                var target_name = get_real_target_name(target);
+                if (local_execution == false) {
+                    var scaler =  this.atlas_scale(target, target_name, offload, ...arguments_list);
+                    return scaler;
+                } else {
+                    this.atlas_nested_fcalls++;
+                    var e = exec_local(target, target_name, ...arguments_list, "exec")
+                    this.atlas_nested_fcalls--;
+                    return e
+                }
+            }
+        }
+    }
+    
     /*
      * Fetch a worker for a task
      */
@@ -151,7 +175,7 @@ export class AtlasWrapper {
         return request
     }
 
-    promise_reference(wrk, request, target, function_name, arguments_list) {
+    promise_reference(wrk, request, target, function_name, offload_info, arguments_list) {
         return new Promise((resolve, reject) => {
             this.workerManager.total_workers[wrk].postMessage(
                 {type : "task_streaming",
@@ -162,13 +186,34 @@ export class AtlasWrapper {
             this.workerManager.local_exec.set(request.req_id,
                                               { target : target,
                                                 function_name: function_name, arguments_list});
+            if (offload_info.hasOwnProperty('timeout')) {
+                // console.log('[atlas-wrapper.js:167 set timeout]');
+                os.setTimeout( () => {
+                    // console.log(`[atlas-wrapper.js:191 local ${offload_info.timeout} timeout]`);
+                    const task_not_completed = this.workerManager.resolvers.has(request.req_id);
+                    // console.log(`[atlas-wrapper.js:175 task_not_completed=${task_not_completed}]`);
+                    if (task_not_completed) {
+                        // console.log(`[atlas-wrapper.js:177 launch local]`);
+                        var local_exec = this.workerManager.local_exec.get(request.req_id);
+                        
+                        var local_promise = aWrapper.exec_local(
+                            local_exec.target,
+                            local_exec.target_name,
+                            local_exec.arguments_list);
+                        // console.log(`workers-manager.js:62`);
+                        local_promise.then(this.workerManager.resolvers.get(request.req_id),
+                                           this.workerManager.rejectors.get(request.req_id));
+                        this.workerManager.completed_locally.set(request.req_id);
+                    }
+                }, offload_info.timeout);
+            }
         });
     }
 
     /*
      * We are in streaming mode, offload task remotely on workers
      */
-    stream_packet(request, target, function_name, arguments_list) {
+    stream_packet(request, target, function_name, offload_info, arguments_list) {
         // can we scale dynamically by allocating more workers
         if (globalThis.scaling == true) {
             change_worker_count()
@@ -181,19 +226,19 @@ export class AtlasWrapper {
         } else
             this.module_sent_to_all_workers[wrk] = 1;
         // offload the request to a worker
-        return this.promise_reference(wrk, request, target, function_name, arguments_list)
+        return this.promise_reference(wrk, request, target, function_name, offload_info, arguments_list)
     }
 
     /*
      * Offload to atlas nodes or local node
      */
-    atlas_scale(target, function_name, arguments_list) {
+    atlas_scale(target, function_name, offload_config, arguments_list) {
         // generate an offloading request
         let request = this.craft_request(function_name, arguments_list)
         //increase the number of packets sent
         this.pkt_sent++;
         // offload the result
-        return this.stream_packet(request, target, function_name, arguments_list);
+        return this.stream_packet(request, target, function_name, offload_config, arguments_list);
     }
 
     basename(s) {
@@ -291,17 +336,19 @@ export class AtlasWrapper {
      * @param {string} filename The file name doing the importing
      * @return {bool} true if the object should be offloaded
      */
+    /**
+     * Return true is the object is to be offloaded
+     *
+     * @param {string} real_name The name being imported
+     * @param {string} filename The file name doing the importing
+     * @return {bool} true if the object should be offloaded
+     */
     IsOffloaded(real_name, filename) {
         const imports = globalThis.offload_funcs.get(filename);
-
         if(imports === undefined) {
-            return false;
+            return undefined;
         }
-
-        if(!imports.has(real_name)) {
-            return false;
-        }
-        return true;
+        return imports.get(real_name);
     }
 
     /*
@@ -316,7 +363,8 @@ export class AtlasWrapper {
         
         // If it is an function 
         if (type === 'function') {
-            if(!this.IsOffloaded(real_name, filename)) {
+            let offload = this.IsOffloaded(real_name, filename);
+            if(offload === undefined) {
                 return nobj;
             }
 
@@ -325,7 +373,8 @@ export class AtlasWrapper {
                 // we deep copy in case the obj is const
                 obj = Object.assign(() => {}, nobj);
             // Wrap the function in a proxy 
-            const wrappedObj = new Proxy(obj, this.handler);
+            // const wrappedObj = new Proxy(obj, this.handler);
+            const wrappedObj = new Proxy(obj, this.handler_func(offload));
             Object.defineProperty(obj, "father", { value: obj.name });
             if (obj.name === '') {
                 Object.defineProperty(obj, 'name', { value: real_name });
@@ -346,7 +395,8 @@ export class AtlasWrapper {
                 //if its an anonymous function
                 if (typeof(obj[key]) === 'function') { // && obj[key].name === undefined) {
                     const import_attribute = `${real_name}.${key}`;
-                    if (!this.IsOffloaded(import_attribute, filename)) {
+                    let offload = this.IsOffloaded(import_attribute, filename);
+                    if (offload === undefined) {
                         continue;
                     }
 
@@ -354,7 +404,7 @@ export class AtlasWrapper {
                     Object.defineProperty(obj[key], "name", { value: key });
                     Object.defineProperty(obj[key], "father", { value: real_name });
                     // wrap the function call with a proxy
-                    let p = new Proxy(obj[key], this.handler);
+                    let p = new Proxy(obj[key], this.handler_func(offload));
                     // Store the wrapped obj
                     this.wrappedObjects.set(p, {'rname' :real_name, 'father': true});
                     obj[key] = p

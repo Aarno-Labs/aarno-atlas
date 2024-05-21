@@ -20,6 +20,12 @@ export class WorkersManager {
         this.resolvers  = new Map();
         this.rejectors  = new Map();
         this.local_exec = new Map();
+
+        // If a task isn't completed by a timeout
+        // run it locally, when remote finishes
+        // check here is see if it was completed locally
+        this.completed_locally = new Map();
+        
         this.worker_array = [];
         this.total_workers = [];
         this.received_functions = new Map();
@@ -48,48 +54,56 @@ export class WorkersManager {
 
     update_onmessage_resolvers(worker) {
         worker.onmessage = (e) =>  {
+            try {
             this.atlas_increase_function_count(e.data.values.func);
-            // console.log(`workers-manager.js:52 e.data.values.data=${e.data.values.data}`);
+            // console.log(`workers-manager.js:60 e.data.values.fulfill=${e.data.values.fulfill}`);
             
             // resolve the value
 //             const worker_result = eval('(' + e.data.values.data + ')');
-            const worker_result = e.data.values.data;
+            if (!this.completed_locally.has(e.data.values.req_id)) {
+                // console.log(`workers-manager.js:65`);
+                const worker_result = e.data.values.data;
 
-            if(e.data.values.fulfill === 'SUCCESS') {
-                this.resolvers.get(e.data.values.req_id)(worker_result);
-            }
-            else if(e.data.values.fulfill === 'REJECT') {
-                this.rejectors.get(e.data.values.req_id)(worker_result);
-            }
-            else if(e.data.values.fulfill === 'LOCAL'
-                   || e.data.values.fulfill === 'GlobalAccessError') {
-                // console.log(`workers-manager.js:56 this.remoteOnly=${this.remoteOnly}`);
-                if (this.remoteOnly === true) {
-                    console.log(`ERROR: remote execution failed fulfill=${e.data.values.fulfill} remoteOnly=${this.remoteOnly}`);
-                    std.exit(1);
+                if(e.data.values.fulfill === 'SUCCESS') {
+                    this.resolvers.get(e.data.values.req_id)(worker_result);
                 }
-                // console.log(`workers-manager.js:61 remoteOnly=${remoteOnly}`);
-                try {
-                    var local_exec = this.local_exec.get(e.data.values.req_id);
-                    // console.log(`workers-manager.js:57`);
-                    // for(const k in aWrapper) {
-                    //     console.log(`aWrapper[${k}]=${aWrapper[k]}`);
-                    // }
-                    var local_promise = aWrapper.exec_local(
-                        local_exec.target,
-                        local_exec.target_name,
-                        local_exec.arguments_list);
-                    // console.log(`workers-manager.js:62`);
-                    local_promise.then(this.resolvers.get(e.data.values.req_id),
-                                        this.rejectors.get(e.data.values.req_id));
-                    // console.log(`workers-manager.js:65`);
-                } catch (err) {
-                    // console.log(`workers-manager.js:63`);
-                    console.log(err);
+                else if(e.data.values.fulfill === 'REJECT') {
+                    this.rejectors.get(e.data.values.req_id)(worker_result);
                 }
+                else if(e.data.values.fulfill === 'LOCAL'
+                        || e.data.values.fulfill === 'GlobalAccessError') {
+                    // console.log(`workers-manager.js:56 this.remoteOnly=${this.remoteOnly}`);
+                    if (this.remoteOnly === true) {
+                        console.log(`ERROR: remote execution failed fulfill=${e.data.values.fulfill} remoteOnly=${this.remoteOnly}`);
+                        std.exit(1);
+                    }
+                    // console.log(`workers-manager.js:61 remoteOnly=${remoteOnly}`);
+                    try {
+                        var local_exec = this.local_exec.get(e.data.values.req_id);
+                        // console.log(`workers-manager.js:57`);
+                        // for(const k in aWrapper) {
+                        //     console.log(`aWrapper[${k}]=${aWrapper[k]}`);
+                        // }
+                        var local_promise = aWrapper.exec_local(
+                            local_exec.target,
+                            local_exec.target_name,
+                            local_exec.arguments_list);
+                        // console.log(`workers-manager.js:62`);
+                        local_promise.then(this.resolvers.get(e.data.values.req_id),
+                                           this.rejectors.get(e.data.values.req_id));
+                        // console.log(`workers-manager.js:65`);
+                    } catch (err) {
+                        // console.log(`workers-manager.js:63`);
+                        console.log(err);
+                    }
+                }
+            }
+            } catch(e) {
+                console.log(e);
             }
             this.resolvers.delete(e.data.values.req_id);
             this.rejectors.delete(e.data.values.req_id);
+            this.completed_locally.delete(e.data.values.req_id);
         }
     }
 

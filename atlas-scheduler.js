@@ -37,16 +37,15 @@ function setup_servers(server_file) {
                 const verify = info[3];
                 const cert = info[4];
                 var node = {
-                    port      : port,
-                    ip        : ip,
-                    c_idx     : -1,
-                    id        : ID,
-                    nonce     : 0,
-                    port      : port,
-                    ssl       : ssl,
-                    verify    : verify,
-                    cert      : cert,
-                    connected : false
+                    port   : port,
+                    ip     :ip,
+                    c_idx  : -1,
+                    id     : ID,
+                    nonce  : 0,
+                    port   : port,
+                    ssl    : ssl,
+                    verify : verify,
+                    cert   : cert
                 };
                 id++;
                 nodes.push(node);

@@ -8,7 +8,55 @@ import {WorkersManager} from './workers-manager.js';
  * If not available return -1;
  */
 function get_battery() {
-    return 100
+    let arch = std.popen("uname -m", "r");
+    let arch_var = arch.getline()
+    /* x86 handling */
+    if (arch_var == "x86_64") {
+        // laptops
+        let power_sup = std.loadFile("/sys/class/power_supply/BAT0/capacity")
+        if (power_sup === null)
+            return -1;
+        power_val = power_sup.getline();
+        return parseFloat(power_val.getline())
+    } else if (arch_var == "aarch64") {
+        /* maybe something different for android ? like /sys/class/power_supply/capacity? */
+        let cmd = "/system/bin/dumpsys battery"
+        var prog = std.popen(cmd, "r");
+        let data = []
+        let r ;
+        while (( r = prog.getline()) != null) {
+            data.push(r.trim(" "))
+        }
+        prog.close(prog)
+        // the hashmap that will store all the information with battery stas
+        const battery_stats = new Map();
+        // extract battery statistics from the android devices
+        for (let i = 1; i < data.length; i++) {
+            let item = data[i]
+            let kv = item.split(": ")
+            battery_stats[kv[0]] = kv[1]
+        }
+        r = parseFloat(battery_stats["level"])
+        if (r > 100)
+            r = 100
+        return r
+    } else {
+        let cmd = "python3 battery_waveshare.py"
+        var prog = std.popen(cmd, "r");
+        let result = prog.getline().split();
+        if (isNaN(result)) {
+            // try the sugarpi server
+            let cmd = "bash get_battery.sh"
+            var prog = std.popen(cmd, "r");
+            result = prog.getline().split(' ')[1]
+        }
+        // convert the string to float
+        var r = parseFloat(result)
+        // overcharge ? set to 100
+        if (r > 100) 
+            r = 100
+        return r
+    }
 }
 
 function get_battery_diff(start) {

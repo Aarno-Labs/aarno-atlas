@@ -5,7 +5,7 @@ import * as atlas_wrapper from './atlas-wrapper.js';
 import {WorkersManager} from './workers-manager.js';
 import atlas_tools from './atlas-tools.js';
 import {stringify, parse} from './atlas-srl.js';
-import {atlas_battery, BatteryWorkers}  from './atlas-battery.js';
+// import {atlas_battery, BatteryWorkers}  from './atlas-battery.js';
 globalThis.os = os;
 globalThis.std = std;
 globalThis.atlas_tools = atlas_tools;
@@ -112,36 +112,31 @@ function evaluate_args(opts) {
         std.exit(1);
     }
     
-    // read contents of the file
-    var data = std.loadFile(opts["offloads"]);
-    if (data === undefined || data === null) {
+    // Create offload map [offload file]->[func name]->[func name, timeout]
+    let offloads = JSON.parse(std.loadFile(opts["offloads"]));
+    if (offloads === undefined || offloads === null) {
         print (`Error: failed to read offloads file "${opts['offloads']}."`);
         std.exit(1);
     }
-
-    data = data.trim();
-
-    // split the contents by new line
-    const lines = data.split(/\r?\n/);
-    lines.forEach((line) => {
-        const file_import = line.split(" ");
-        if (file_import.length != 2) {
-            print(`[ERROR expected one space in "${line}" ]`);
-            print_usage_and_exit();
-            std.exit(1);
-        }
-
-        var imports = globalThis.offload_funcs.get(file_import[0]);
-        if (imports === undefined) {
-            globalThis.offload_funcs.set(file_import[0], new Set([file_import[1]]));
+    
+    offloads.offloads.forEach((offload) => {
+        let imports = globalThis.offload_funcs.get(offload.file);
+        if (imports !== undefined) {
+            print(`[WARNING: duplicate offload file ${offload.file}`);
         } else {
-            if (imports.has(file_import[1])) {
-                print (`[WARNING duplicate entry ${line}]`);
-            }
-
-            imports.add(file_import[1]);
+            imports = new Map();
+            globalThis.offload_funcs.set(offload.file, imports);
         }
+            
+        offload.funcs.forEach((func) => {
+            if (imports.has(func.name)) {
+                print (`[WARNING duplicate entry ${func}]`);
+            } else {
+                imports.set(func.name, func);
+            }
+        });
     });
+
     if (opts["log"] !== undefined) {
         globalThis.log_name = opts["log"];
         globalThis.log_file = std.open(globalThis.log_name, 'w');
@@ -191,9 +186,8 @@ globalThis.atlas_scheduler = atlas_scheduler
 /***********************************************/
 /*        Initialize atlas workers         */
 /***********************************************/
-var nodes = [];
+let nodes = null;
 if (local_execution == false) {
-    atlas.allocate_clients(get_server_count());
     nodes = atlas_scheduler.setup_servers(server_file)
 }
 

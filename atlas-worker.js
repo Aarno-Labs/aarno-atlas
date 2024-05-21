@@ -14,8 +14,9 @@ let nonce = 0
 let promise_results = []
 // the tasks that need to be executed on this thread
 let worker_tasks = []
-// the list of all the servers bound to this thread
-let server_list =  [{}]
+
+let server = null;
+let server_info = null;
 
 /*
  * Craft the atlas response packet for local/remote
@@ -49,15 +50,14 @@ function craft_response(send_start, fulfill, worker_res, msg, mode) {
 var reconnect_attempts = 5;
 var wait_sec = 1;
 
-function connect_to_server(node) {
+function connect_to_server(server, node) {
     // var attempts = reconnect_attempts;
     // console.log(`connect_to_server.js:53 node['nonce']=${node['nonce']}`);
     node['nonce'] = 0
 
     // console.log(`connect_t_server.js:57 reconnect_attempts=${reconnect_attempts} wait_sec=${wait_sec}`);
-    node.connected = false;
-    var result = atlas.connect(
-        node.c_idx,
+    var connect_result = atlas.connect(
+        server,
         node.ip,
         node.port,
         node.ssl,
@@ -66,35 +66,12 @@ function connect_to_server(node) {
         reconnect_attempts,
         wait_sec
     );
-    if (result == -1) {
+    if (connect_result == -1) {
         print(`Failed to connect to server: ${node.ip}:${node.port}`);
-        return false;
-    }
-    node.connected = true
-    
-    const r_send_pubkey = atlas.send_pubkey(node.c_idx)
-    if (r_send_pubkey === undefined) {
-        print(`Failed send_pubkey (${r_send_pubkey}) to server: ${node.ip}:${node.port}`);
-        atlas.close(node.c_idx);
-        return false;
-    }
-
-    const r_recv_pubkey = atlas.recv_pubkey(node.c_idx);
-    if (!r_send_pubkey) {
-        print(`Failed recv_pubkey (${r_recv_pubkey}) from server: ${node.ip}:${node.port}`);
-        atlas.close(node.c_idx);
-        return flase;
+        return connect_result;
     }
     
-    const r_recv_ekey = atlas.recv_encryption_key(node.c_idx);
-    if (r_recv_ekey === undefined) {
-        print(`Failed recv_encryption_key(${r_recv_ekey}) from server: ${node.ip}:${node.port}`);
-        atlas.close(node.c_idx);
-        return false;
-    }
-
-    node.connected = true;
-    return true;
+    return connect_result;
 }
 
 const func_depends = new Map();
@@ -102,85 +79,77 @@ const func_depends = new Map();
 /*
  * offload the request to the remote worker
  */
-function send(node, msg, arguments_list) {
+function send(server, msg, arguments_list) {
     // calculate the send time
     //    var attempts = reconnect_attempts;
     const send_start = atlas_tools.get_time();
     if (!func_depends.has(msg.func)) {
         func_depends.set(msg.func, msg.deps);
     }
+    
     while (true) {
         try {
             const str_msg = stringify(msg);             
            // console.log(`atlas-worker.js:110 send write`);
-            const write_res = atlas.write(node.c_idx, str_msg, arguments_list);
-            // console.log(`atlas-worker.js:106 send write write_res=${write_res}`);
+            const write_res = atlas.write(server, str_msg, arguments_list);
+            // console.log(`atlas-worker.js:115 send write write_res=${write_res}`);
             if(write_res == undefined) {
                 // Need to reset the nonce and resend the depends
+                // TODO(epl): main thread only sends depends once
                 // console.log(`atlas-worker.js:115 write failed`);
-                if (!connect_to_server(node)) {
-                    // console.log(`atlas-worker.js:119 connection failed`);
+                const connect_result = connect_to_server(server, server_info);
+                if (connect_result == -1) {
+                    console.log(`atlas-worker.js:122 connection failed server=${server}`);
                     break;
                 }
-                msg.nonce = node.nonce;
+                msg.nonce = server_info.nonce;
                 msg.deps = func_depends.get(msg.func);
-                // console.log(`atlas-worker.js:124 write reconnect`);
-                // console.log(func_depends.get(msg.func));
+                // console.log(`atlas-worker.js:124 write reconnect server=${server}`);
                 continue;
             }
             
-            // console.log(`atlas-worker.js:99 send recv call`);
-            const data_both = receive(node.c_idx);
+            // console.log(`atlas-worker.js:128 recv server=${server}`);
+            const data_both = receive(server);
+            // console.log(`atlas-worker.js:132 receive done ${data_both}`);
+
+            try {
             // undefined mean communication failure, so reconnect
             if(data_both === undefined) {
-                // console.log(`atlas-worker.js:138 receive failed`);
-                if (!connect_to_server(node)) {
-                    console.log(`connection failed`);
+                // console.log(`atlas-worker.js:121 receive failed`);
+                const recv_reconnect = connect_to_server(server, server_info);
+                // console.log(`atlas-worker.js:123 recv reconnect failed server=${server}`);
+                if (recv_reconnect == -1) {
+                    console.log(`atlas-worker.js:123 recv reconnect failed server=${server}`);
                     break;
                 }
-                /// console.log(`atlas-worker.js:138 receive reconnect succeeded`);
+                console.log(`atlas-worker.js:126 receive reconnect succeeded`);
                 msg.deps = func_depends.get(msg.func);
-                msg.nonce = node.nonce;
-                // console.log(`node.nonce={}`, node.nonce);
+                msg.nonce = server_info.nonce;
+                // console.log(`server.nonce={}`, server.nonce);
                 // console.log(msg.deps);
                 continue;
             }
+            // console.log('atlas-worker.js:133');
             const recv_res = data_both.serialized;
-            // console.log('atlas-worker.js:116');
-            // for(const k in recv_res) {
-            //     console.log(`recv_res[${k}]=${recv_res[k]}`);
-            // }
-            // console.log(`atlas-worker.js:101 send recv recv_res=${recv_res}`);
-            
-            if(recv_res === undefined) {
-                // console.log(`atlas-worker.js:139 recv failed`);
-                if (connect_to_server(node)) {
-                    console.log(`atlas-worker.js:142 connection failed`);
-                    break;
-                }
-                msg.nonce = node.nonce;
-                msg.deps = func_depends.get(msg.func);
-                // console.log(`atlas-worker.js:147 write reconnect`);
-                // console.log(func_depends.get(msg.func));
-                continue;
-            }
-            // console.log(`atlas-worker.js:106 send recv done`);
+            // console.log(`atlas-worker.js:157 ${recv_res}`);
+                
             // increase the nonce
             msg.nonce = msg.nonce + 1
             if (msg.nonce != recv_res.nonce) {
                 console.log("Error, invalid nonce. Expected:", msg.nonce, "Received:", recv_res.nonce)
                 std.exit(1)
             }
-            // console.log(`atlas-worker.js:113 send recv`);
+            // console.log(`atlas-worker.js:178 send recv`);
             let res = craft_response(send_start, recv_res.fulfill, recv_res.data, msg, "remote");
             // console.log(`atlas-worker.js:115 send recv`);
             res.buffer_size = write_res
-            // console.log(`atlas-worker.js:117 send`);
+            // console.log(`atlas-worker.js:182 send`);
             return res;
         } catch (err) {
-            // console.log(`atlas-worker.js:157 err=${err}`);
+            console.log(`atlas-worker.js:186 err=${err}`);
             break;
         }
+        } catch(ee) { console.log(ee);}
     }
     // console.log(`atlas-worker.js:178 failed`);
     var fail_response =  craft_response(send_start, 'LOCAL', undefined, msg, "remote");
@@ -204,31 +173,15 @@ function receive(sock) {
     // return [data_both.serialized, parse_res];
 }
 
-function pick_server() {
-    let tmp = current_server % server_count
-    current_server++
-    let srv = server_list[tmp]
-    return srv
-}
-
-async function do_task(node, msg, arguments_list) {
-    var send_result = send(node, msg, arguments_list)
+async function do_task(server, msg, arguments_list) {
+    var send_result = send(server, msg, arguments_list)
     return send_result;
 }
 
 var parent = os.Worker.parent;
 
-function add_servers(server_nodes) {
-    server_nodes.forEach((node) => {
-        node.c_idx = server_count;
-        if (!connect_to_server(node)) {
-            std.exit(1);
-        }
-        server_list[server_count] = node;
-        server_count++;
-    });
-}
 
+let node = null;
 /*
  * Worker request handler. Communicatbes with the parent thread and 
  * sends/receives offloading messages from/to the parent thread and the workers
@@ -245,22 +198,22 @@ function handle_msg(e) {
         wait_sec = ev.wait_sec;
         break;
     case "servers" :
-        add_servers(ev.msg);
+        server = atlas.create_server();
+        server_info = ev.msg[0];
+        connect_to_server(server, server_info);
         break;
     case "task" :
         worker_tasks.push(ev.msg)
         break;
     case "task_streaming":
         // get a server
-        let srv = pick_server()
         let msg = ev.msg
-        msg.nonce = srv['nonce']
-        msg['nodeIp'] = srv['ip']
-        // push the task and store in the promises array
-        let val = do_task(srv, msg, ev.args)
+        msg.nonce = server_info['nonce']
+        msg['nodeIp'] = server_info['ip']
+        // push the task and store xin the promises array
+        let val = do_task(server, msg, ev.args)
         val.then(function(result) {
-            srv['nonce'] = msg.nonce
-            srv['nodeId'] = srv['id']
+            server_info['nonce'] = msg.nonce
             parent.postMessage({type: "streaming_done", "values" : result})
         });
         break;
