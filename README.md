@@ -10,25 +10,25 @@ This build may take over ten minutes.
 docker build -t atlas-servers --progress=plain -f aarno-atlas/docker/Dockerfile .
 ```
 
-This creates the images `atlas-servers`.
+This creates the image `atlas-servers`.
 
 ## Simple Server
 
 The simple server is the easiest to run. Use the following command to copy the simple server out of an atlas-server container.
-Note docker requires that this files be copied out owned by root. They will run fine.
+Docker requires that this files be copied out owned by root. They will run fine.
 
 ```
 /usr/bin/docker run --rm -v .:/host atlas-servers cp -r /root/out/ /host.
 ```
 
-The command will run the simple server accepting unecrypted traffic. The server must be run from the `out/servers` directory:
+This command will run the simple server accepting unecrypted traffic. The server must be run from the `out/servers` directory:
 
 ```
 cd out/servers && ./simple-server -p 7000
 ```
 
 ## Client
-The directory `out/client` hold the client.
+The directory `out/client` holds the client.
 
 The server's address is in this file `.../out/client/atlas-client/address-files/atlas-addresses.unencrypted.txt`.
 
@@ -38,10 +38,10 @@ It needs to be updated with the your server's address.
 7000 192.168.0.22 unencrypted
 ```
 
-Copy the entire client directory the target device. Here is an example command:
+Copy the entire client directory to the target device. Here is an example command:
 
 ```
-scp -r aarno@192.168.0.23:/home/elahtinen/public-atlas/out/client .
+scp -r aarno@192.168.0.23:/home/aarno/public-atlas/out/client .
 ```
 
 This command runs a simple offloading from the `client` directory:
