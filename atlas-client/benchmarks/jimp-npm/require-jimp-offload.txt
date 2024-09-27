@@ -1,0 +1,10 @@
+{
+    "offloads" : [
+        { "file" : "benchmarks/jimp-npm/read_raw.js",
+          "funcs" : [
+              { "name" : "encode"
+              }
+          ]
+        }
+    ]
+}

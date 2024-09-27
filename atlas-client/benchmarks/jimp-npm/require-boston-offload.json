@@ -1,0 +1,14 @@
+{
+    "offloads" : [
+        { "file" : "benchmarks/jimp-npm/boston_raw.js",
+          "funcs" : [
+              { "name" : "encode",
+                "only_faster" : {
+                    "check_count" : 3
+                }
+              }
+          ]
+        }
+    ]
+}
+    

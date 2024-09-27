@@ -1,0 +1,11 @@
+{
+    "offloads" : [
+        { "file" : "benchmarks/math/run.js",
+          "funcs" : [
+              { "name" : "math.add"},
+              { "name" : "math.mult"},
+              { "name" : "math.div"}
+          ]
+        }
+    ]
+}

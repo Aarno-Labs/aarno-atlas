@@ -1,0 +1,10 @@
+{
+    "offloads" : [
+        { "file" : "benchmarks/crypto_benchmark/run.js",
+          "funcs" : [
+              { "name" : "benchmarks.encrypt_sign"}
+          ]
+        }
+    ]
+}
+

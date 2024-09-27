@@ -1,136 +1,82 @@
-# Aarno Labs Atlas Client
-This document describes how to install and run the Aarno Labs Atlas client.
+This document is an overview on using the Atlas system.
 
+## Docker Build
 
-## Quick Start
+Assuming repo was cloned into `aarno-atlas` command will build the docker image containing the server and client.
 
-Clone this repository to your Raspberry Pi:
-
-```
-git clone ######replaceme########
-```
-
-Set the environment `ATLAS_HOME` to the location of the repository:
+This build may take over ten minutes.
 
 ```
-export ATLAS_HOME=/home/pi/aarno-atlas
+docker build -t atlas-servers --progress=plain -f aarno-atlas/docker/Dockerfile .
 ```
 
-The device needs access to `128.30.84.160` (ports 7000, 8000, and 8100).
+This creates the images `atlas-servers`.
 
+## Simple Server
 
-The script `atlas.sh` executes the offloading script:
+The simple server is the easiest to run. Use the following command to copy the simple server out of an atlas-server container.
+Note docker requires that this files be copied out owned by root. They will run fine.
 
+```
+/usr/bin/docker run --rm -v .:/host atlas-servers cp -r /root/out/ /host.
+```
 
-The script runs a JavaScript script, creating a JPEG from raw image data.
+The command will run the simple server accepting unecrypted traffic. The server must be run from the `out/servers` directory:
 
-Atlas offloads the image creation to the remote server.
+```
+cd out/servers && ./simple-server -p 7000
+```
+
+## Client
+The directory `out/client` hold the client.
+
+The server's address is in this file `.../out/client/atlas-client/address-files/atlas-addresses.unencrypted.txt`.
+
+It needs to be updated with the your server's address.
+
+```
+7000 192.168.0.22 unencrypted
+```
+
+Copy the entire client directory the target device. Here is an example command:
+
+```
+scp -r aarno@192.168.0.23:/home/elahtinen/public-atlas/out/client .
+```
+
+This command runs a simple offloading from the `client` directory:
+
+```
+../qjs ./atlas.js --file benchmarks/math/run.js --offloads benchmarks/math/aarno-offload-funcs.math.txt --servers 1 --server-file address-files/atlas-addresses.unencrypted.txt
+```
 
 Here is a sample output:
 
 ```
-pi@pi1:~/$ ATLAS_HOME=`pwd` . ./atlas.sh
-[2023/10/31-09:21:37.702] Call Encode
-[2023/10/31-09:21:39.117] Done Encode
-[2023/10/31-09:21:39.121] Call Encode
-[2023/10/31-09:21:40.376] Done Encode
-[2023/10/31-09:21:40.378] Call Encode
-[2023/10/31-09:21:41.707] Done Encode
-[2023/10/31-09:21:41.711] Call Encode
-[2023/10/31-09:21:42.986] Done Encode
-[2023/10/31-09:21:42.989] Call Encode
-[2023/10/31-09:21:44.335] Done Encode
-...
-```
-
-`Call Encode` indicates the image creation has been sent to the server.
-
-`Done Encode` indicates the new image  has been received by the client.
-
-If the connection to the server is lost, qjs run the computation locally.
-
-If connection to the server is established, it will offload computations again.
-
-The following output shows a disconnect, local execution and reconnect:
-```
-pi@pi1:~/$ ATLAS_HOME=`pwd` . ./atlas.sh
-[2023/12/08-10:19:09.563] Call Encode
-[2023/12/08-10:19:10.548] Done Encode
-[2023/12/08-10:19:10.550] Call Encode
-[2023/12/08-10:19:11.541] Done Encode
-[2023/12/08-10:19:11.543] Call Encode
-[2023/12/8 10:19:12.510] Connect attempt(1) old_fd=7, new_fd=9
-r_connect[1] failed sock_fd=9 -1 Connection refused
-Failed to connect to server: 192.168.0.22:7000
-connection failed
-[2023/12/08-10:20:09.195] Done Encode
-[2023/12/08-10:20:09.206] Call Encode
-[2023/12/8 10:20:09.489] Connect attempt(1) old_fd=7, new_fd=9
-r_connect[1] failed sock_fd=9 -1 Connection refused
-Failed to connect to server: 192.168.0.22:7000
-[2023/12/08-10:21:04.796] Done Encode
-[2023/12/08-10:21:04.798] Call Encode
-[2023/12/8 10:21:04.978] Connect attempt(1) old_fd=7, new_fd=9
-r_connect[1] failed sock_fd=9 -1 Connection refused
-Failed to connect to server: 192.168.0.22:7000
-[2023/12/08-10:21:59.726] Done Encode
-[2023/12/08-10:21:59.729] Call Encode
-[2023/12/08-10:22:01.388] Done Encode
-...
-```
-
-The client attempts to reconnect for approximately 10 minutes.
-
-Passing `-r` to `atlas.sh` enables remote only execution, which will not run computations locally if the connection to the server is lost.
-
-Passing `-v` to `atlas.sh` provides verbose output.
-
-This example sets `ATLAS_HOME` on the command line and uses `--` to pass arguments to `atlas.sh`.
-```
-ATLAS_HOME=`pwd` . ./atlas.sh -- -v
-```
-
-# Further Information
-The following provides more information on the Atlas offloading system but it not required to run the system.
-
-## Components
-
-The Atlas client consists of 4 components.
-
-- qjs executable
-- Atlas JavaScript
-- benchmark javascript files
-- Certificate (for ssl)
-
-
-## qjs
-[qjs](https://bellard.org/quickjs/) is a JavaScript interpreter binary that has been modified to support offloading.
-
-It is (statically) compiled for `armv6-rpi-linux-gnueabihf`.
-
-It has been tested on a `Raspberry Pi Zero W Rev 1.1` with the following kernel.
+[2024/09/27-10:17:18.978] REMOTE
+[2024/09/27-10:17:19.004] REMOTE
+[2024/09/27-10:17:19.017] REMOTE
+>> add true 46
+>> div true Infinity
+>> mul true 5
+>> all_passed = 1
 
 ```
-pi@pi1:~$ uname -a
-Linux pi1 5.10.63+ #1457 Tue Sep 28 11:24:51 BST 2021 armv6l GNU/Linux
+
+This command offloads JPEG compression:
+
+```
+../qjs --unhandled-rejection ./atlas.js --file benchmarks/jimp-npm/boston_raw.js --offloads benchmarks/jimp-npm/require-boston-offload.json --servers 1 --server-file address-files/atlas-addresses.unencrypted.txt
 ```
 
-The script `atlas.sh` is provided to execute the `qjs` as its configuration is complicated.
+It will write a small jpeg file to `/tmp/j.jpg`. Here is the output from a sample run:
 
-## JavaScript Files
+```
+[pi@pi2 ~/public/client/atlas-client]$ ../qjs --unhandled-rejection ./atlas.js --file benchmarks/jimp-npm/boston_raw.js --offloads benchmarks/jimp-npm/require-boston-offload.json --servers 1 --server-file address-files/atlas-addresses.unencrypted.txt 
+[2024/09/27-13:30:44.429] Call Encode
+[2024/09/27-13:30:44.431] REMOTE
+[2024/09/27-13:30:44.677] Done Encode
+```
 
-The directory `atlas-client` contains the Atlas JavaScript files.
 
-They interact with the client JavaScript script to offload its computation.
 
-In addition to the Atlas JavaScript files, benchmark client files are provided.
-
-This demonstration uses the files found in `benchmarks/jimp-npm`.
-
-Other benchmark client require in the installation of npm packages.
-
-## Certificate
-
-The `qjs` uses the self-signed `cert.pem` certificate for SSL communication with the server.
-
-`qjs` directly loads the certificate, it doesn't need to be installed in the system.
